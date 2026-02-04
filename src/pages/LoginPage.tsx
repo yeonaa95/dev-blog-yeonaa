@@ -1,40 +1,25 @@
 // src/pages/LoginPage.tsx
 
-/**
- * 로그인 페이지
- *
- * Day 1 요구사항: AUTH-002, AUTH-003
- * Day 1 사용자 스토리: US-002 (소셜 로그인)
- *
- * 인수 조건:
- * - 이메일/비밀번호 로그인 폼이 있다
- * - Google 로그인 버튼이 있다 (오후에 구현)
- * - 로그인 성공 시 메인 페이지로 이동한다
- */
-
-import { type SyntheticEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { signIn, getAuthErrorMessage } from "../lib/auth";
+import { useState } from "react";
+import { Link, useNavigate, useLocation } from 'react-router-dom';  // useLocation 추가
+import { signIn, getAuthErrorMessage, signInWithGoogle } from "../lib/auth";
 
 function LoginPage() {
-    // 폼 입력값 상태
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-
-    // 로딩 및 에러 상태
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const navigate = useNavigate();
+    const location = useLocation();  // 추가
 
-    /**
-     * 이메일/비밀번호 로그인 핸들러
-     */
-    const handleSubmit = async (e: SyntheticEvent<HTMLFormElement>) => {
+    // 로그인 전에 가려던 페이지 (없으면 홈으로)
+    const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
 
-        // 간단한 유효성 검사
         if (!email.trim() || !password.trim()) {
             setError("이메일과 비밀번호를 입력해주세요.");
             return;
@@ -44,13 +29,42 @@ function LoginPage() {
 
         try {
             await signIn(email, password);
-            navigate("/");
+            navigate(from, { replace: true });  // 수정: 원래 페이지로 이동
         } catch (err: unknown) {
             if (err && typeof err === "object" && "code" in err) {
                 const firebaseError = err as { code: string };
                 setError(getAuthErrorMessage(firebaseError.code));
             } else {
                 setError("로그인 중 오류가 발생했습니다.");
+            }
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    /**
+     * Google 로그인 핸들러 (팝업 방식)
+     *
+     * Day 1 사용자 스토리 US-002 인수 조건:
+     * - 클릭 시 Google 로그인 팝업이 뜬다
+     * - 로그인 성공 시 메인 페이지로 이동한다
+     */
+    const handleGoogleLogin = async () => {
+        setError(null);
+        setIsLoading(true);
+
+        try {
+            await signInWithGoogle();
+      navigate(from, { replace: true });  // 수정: 원래 페이지로 이동
+        } catch (err: unknown) {
+            if (err && typeof err === "object" && "code" in err) {
+                const firebaseError = err as { code: string };
+                // 사용자가 팝업을 닫은 경우는 에러 표시 안 함
+                if (firebaseError.code !== "auth/popup-closed-by-user") {
+                    setError(getAuthErrorMessage(firebaseError.code));
+                }
+            } else {
+                setError("Google 로그인 중 오류가 발생했습니다.");
             }
         } finally {
             setIsLoading(false);
@@ -148,15 +162,15 @@ function LoginPage() {
                         </div>
                     </div>
 
-                    {/* Google 로그인 버튼 (오후에 기능 연결) */}
+                    {/* Google 로그인 버튼 - 수정됨! */}
                     <button
                         type="button"
-                        disabled={true}
+                        onClick={handleGoogleLogin}
+                        disabled={isLoading}
                         className="w-full py-3 px-4 bg-white border border-gray-300 text-gray-700 
                      font-semibold rounded-lg flex items-center justify-center gap-3
                      hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500
-                     disabled:bg-gray-100 disabled:cursor-not-allowed
-                     transition-colors"
+                     disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
                     >
                         {/* Google 아이콘 */}
                         <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -177,7 +191,7 @@ function LoginPage() {
                                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                             />
                         </svg>
-                        Google로 계속하기 (오후 구현)
+                        Google로 계속하기
                     </button>
 
                     {/* 회원가입 링크 */}

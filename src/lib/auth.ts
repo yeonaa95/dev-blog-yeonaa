@@ -16,10 +16,40 @@ import {
     signInWithEmailAndPassword,
     signOut,
     onAuthStateChanged,
+    signInWithPopup,
+    GoogleAuthProvider,
 } from "firebase/auth";
-import type { User as FirebaseUser } from "firebase/auth";
+import type { User as FirebaseUser, AuthError } from "firebase/auth";
 import { auth } from "./firebase";
 import type { User } from "@/types";
+
+/**
+ * Google Auth Provider
+ *
+ * Google 로그인을 위한 인증 제공자입니다.
+ */
+const googleProvider = new GoogleAuthProvider();
+
+/**
+ * Google 계정으로 로그인 (팝업 방식)
+ *
+ * Day 1 요구사항: AUTH-003
+ * Day 1 사용자 스토리: US-002 (소셜 로그인)
+ *
+ * 인수 조건:
+ * - Google 로그인 버튼이 있다
+ * - 클릭 시 Google 로그인 팝업이 뜬다
+ * - 로그인 성공 시 메인 페이지로 이동한다
+ * - 처음 로그인해도 별도 회원가입 절차가 없다
+ *
+ * 참고: COOP 경고는 콘솔에만 표시되며 기능에는 영향 없음
+ *
+ * @returns 로그인한 사용자 정보
+ */
+export async function signInWithGoogle(): Promise<User> {
+    const result = await signInWithPopup(auth, googleProvider);
+    return formatUser(result.user);
+}
 
 /**
  * Firebase User를 우리 앱의 User 타입으로 변환
@@ -112,18 +142,22 @@ export function subscribeToAuthState(
  * Firebase Auth 에러 메시지를 사용자 친화적인 한글로 변환
  *
  * Day 1 기능명세서: 예외 흐름의 사용자 메시지 참고
+ *
+ * @param error - Firebase Auth 에러 객체, 에러 코드 문자열, 또는 unknown 타입
+ * @returns 사용자 친화적인 한글 에러 메시지
  */
-export function getAuthErrorMessage(errorCode: string): string {
+export function getAuthErrorMessage(error: unknown): string {
     const errorMessages: Record<string, string> = {
         // 회원가입 에러
         "auth/email-already-in-use": "이미 사용 중인 이메일입니다.",
         "auth/invalid-email": "올바른 이메일 형식을 입력해주세요.",
         "auth/weak-password": "비밀번호는 6자 이상이어야 합니다.",
 
-        // 로그인 에러 (v9+ 부터 아래 오류 코드는 auth/invalid-credential 통합됨
-        //"auth/user-not-found": "등록되지 않은 이메일입니다.",
-        //"auth/wrong-password": "비밀번호가 일치하지 않습니다.",
-        
+        // 로그인 에러
+        // 참고: 최신 Firebase는 보안상 user-not-found, wrong-password 대신
+        // invalid-credential을 주로 반환합니다.
+        "auth/user-not-found": "등록되지 않은 이메일입니다.",
+        "auth/wrong-password": "비밀번호가 일치하지 않습니다.",
         "auth/invalid-credential": "이메일 또는 비밀번호가 올바르지 않습니다.",
         "auth/too-many-requests":
             "너무 많은 시도가 있었습니다. 잠시 후 다시 시도해주세요.",
@@ -134,5 +168,18 @@ export function getAuthErrorMessage(errorCode: string): string {
             "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
     };
 
-    return errorMessages[errorCode] || "알 수 없는 오류가 발생했습니다.";
+    // 문자열로 직접 전달된 경우 (에러 코드)
+    if (typeof error === "string") {
+        return errorMessages[error] || "알 수 없는 오류가 발생했습니다.";
+    }
+
+    // AuthError 타입인지 확인 후 에러 코드 추출
+    if (error && typeof error === "object" && "code" in error) {
+        const authError = error as AuthError;
+        return (
+            errorMessages[authError.code] || "알 수 없는 오류가 발생했습니다."
+        );
+    }
+
+    return "알 수 없는 오류가 발생했습니다.";
 }

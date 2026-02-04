@@ -3,22 +3,18 @@
 /**
  * 헤더 컴포넌트
  *
- * Day 1 컴포넌트 구조도: Layout > Header > Logo, Navigation, AuthButton
- *
- * 인증 상태에 따라 다른 버튼을 표시합니다:
- * - 로그인 전: "로그인" 버튼
- * - 로그인 후: 사용자 정보 + "로그아웃" 버튼
+ * props 대신 Zustand 스토어에서 직접 user 정보를 가져옵니다.
+ * 이제 어디서든 useAuthStore()로 인증 상태에 접근할 수 있습니다!
  */
 
 import { Link } from "react-router-dom";
 import { logout } from "@/lib/auth";
-import type { User } from "@/types";
+import { useAuthStore } from "@/store/authStore";
 
-interface HeaderProps {
-    user: User | null;
-}
+function Header() {
+    // Zustand 스토어에서 user 가져오기
+    const user = useAuthStore((state) => state.user);
 
-function Header({ user }: HeaderProps) {
     const handleLogout = async () => {
         try {
             await logout();
