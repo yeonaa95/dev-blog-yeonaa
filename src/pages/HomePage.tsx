@@ -1,13 +1,6 @@
-/**
- * 홈 페이지 (게시글 목록)
- *
- * Day 1 요구사항: POST-002, UX-001
- * Day 1 사용자 스토리: US-004 (게시글 목록 보기)
- */
-
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getPosts } from "@/lib/posts";
+import { subscribeToPostsRealtime } from "@/lib/posts";
 import { useAuthStore } from "@/store/authStore";
 import PostList from "@/components/PostList";
 import type { PostSummary } from "@/types";
@@ -18,28 +11,25 @@ function HomePage() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    /**
-     * 게시글 목록 불러오기
-     *
-     * Day 1 기능명세서 FUNC-003 기본 흐름:
-     * 1. 사용자가 메인 페이지에 접근한다
-     * 2. 시스템이 Firestore에서 게시글 목록을 조회한다
-     * 3. 시스템이 최신순으로 정렬하여 표시한다
-     */
     useEffect(() => {
-        const fetchPosts = async () => {
-            try {
-                const data = await getPosts();
+        const unsubscribe = subscribeToPostsRealtime(
+            // 성공 콜백
+            (data) => {
                 setPosts(data);
-            } catch (err) {
-                console.error("게시글 목록 조회 실패:", err);
-                setError("게시글을 불러오는데 실패했습니다.");
-            } finally {
                 setIsLoading(false);
-            }
-        };
+                setError(null);
+            },
+            // 옵션
+            { limitCount: 5 },
+            // 에러 콜백
+            // (err) => {
+            //     console.error("실시간 구독 에러:", err);
+            //     setError("게시글을 불러오는데 실패했습니다.");
+            //     setIsLoading(false);
+            // },
+        );
 
-        fetchPosts();
+        return () => unsubscribe();
     }, []);
 
     return (

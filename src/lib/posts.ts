@@ -26,9 +26,12 @@ import {
     Timestamp,
     limit,
     where,
+    startAfter, // 추가
+    onSnapshot, // 추가
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { Post, PostInput, PostSummary, User, Category } from "../types";
+import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";  // 추가
 
 /**
  * 컬렉션 참조
@@ -197,4 +200,151 @@ export async function getPostsByCategory(
             createdAt: data.createdAt,
         };
     });
+}
+
+/**
+ * 게시글 목록 조회 (필터링 옵션 지원)
+ * 
+ * Day 1 요구사항: POST-002, POST-006
+ * - POST-002: 최신순 정렬
+ * - POST-006: 카테고리별 필터링
+ * 
+ * @param options - 조회 옵션
+ * @returns 게시글 요약 목록
+ */
+export interface GetPostsOptions {
+  /** 카테고리 필터 (null이면 전체) */
+  category?: Category | null;
+  /** 조회할 개수 */
+  limitCount?: number;
+  /** 페이지네이션 커서 (이전 쿼리의 마지막 문서) */
+  lastDoc?: QueryDocumentSnapshot<DocumentData> | null;
+}
+
+export interface GetPostsResult {
+  posts: PostSummary[];
+  lastDoc: QueryDocumentSnapshot<DocumentData> | null;
+  hasMore: boolean;
+}
+
+export async function getPostsWithOptions(
+  options: GetPostsOptions = {}
+): Promise<GetPostsResult> {
+  const { category = null, limitCount = 5, lastDoc = null } = options;
+
+  // 쿼리 조건들을 배열로 구성
+  const constraints = [];
+
+  // 카테고리 필터 (Day 1 POST-006)
+  if (category) {
+    constraints.push(where('category', '==', category));
+  }
+
+  // 정렬 (Day 1 POST-002: 최신순)
+  constraints.push(orderBy('createdAt', 'desc'));
+
+  // 페이지네이션: 이전 페이지의 마지막 문서 이후부터
+  if (lastDoc) {
+    constraints.push(startAfter(lastDoc));
+  }
+
+  // 개수 제한 (+1로 다음 페이지 존재 여부 확인)
+  constraints.push(limit(limitCount + 1));
+
+  // 쿼리 실행
+  const q = query(postsCollection, ...constraints);
+  const snapshot = await getDocs(q);
+
+  // hasMore 판단: limitCount + 1개를 요청했으므로
+  const hasMore = snapshot.docs.length > limitCount;
+  
+  // 실제 반환할 문서들 (limitCount개만)
+  const docs = hasMore ? snapshot.docs.slice(0, limitCount) : snapshot.docs;
+
+  const posts = docs.map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      title: data.title,
+      category: data.category,
+      authorEmail: data.authorEmail,
+      authorDisplayName: data.authorDisplayName,
+      createdAt: data.createdAt,
+    };
+  });
+
+  return {
+    posts,
+    lastDoc: docs.length > 0 ? docs[docs.length - 1] : null,
+    hasMore,
+  };
+}
+
+/**
+ * 게시글 목록 실시간 구독
+ * 
+ * 데이터가 변경되면 자동으로 callback이 호출됩니다.
+ * 
+ * @param callback - 데이터 변경 시 호출될 함수
+ * @param options - 조회 옵션
+ * @returns 구독 해제 함수
+ */
+export function subscribeToPostsRealtime(
+  callback: (posts: PostSummary[]) => void,
+  options: { category?: Category | null; limitCount?: number } = {}
+): () => void {
+  const { category = null, limitCount = 20 } = options;
+
+  const constraints = [];
+
+  if (category) {
+    constraints.push(where('category', '==', category));
+  }
+
+  constraints.push(orderBy('createdAt', 'desc'));
+  constraints.push(limit(limitCount));
+
+  const q = query(postsCollection, ...constraints);
+
+  // onSnapshot은 구독 해제 함수를 반환
+  return onSnapshot(q, (snapshot) => {
+    const posts = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        title: data.title,
+        category: data.category,
+        authorEmail: data.authorEmail,
+        authorDisplayName: data.authorDisplayName,
+        createdAt: data.createdAt,
+      };
+    });
+
+    callback(posts);
+  });
+}
+
+/**
+ * 단일 게시글 실시간 구독
+ * 
+ * @param postId - 게시글 ID
+ * @param callback - 데이터 변경 시 호출될 함수
+ * @returns 구독 해제 함수
+ */
+export function subscribeToPostRealtime(
+  postId: string,
+  callback: (post: Post | null) => void
+): () => void {
+  const docRef = doc(db, 'posts', postId);
+
+  return onSnapshot(docRef, (snapshot) => {
+    if (snapshot.exists()) {
+      callback({
+        id: snapshot.id,
+        ...snapshot.data(),
+      } as Post);
+    } else {
+      callback(null);
+    }
+  });
 }
