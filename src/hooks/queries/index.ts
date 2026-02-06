@@ -2,4 +2,4 @@
 
 export * from "./usePosts";
 export * from "./usePost";
-export * from "./queries/keys";
+export * from "./keys";

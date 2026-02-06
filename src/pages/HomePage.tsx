@@ -1,36 +1,44 @@
-import { useEffect, useState } from "react";
+/**
+ * 홈 페이지 (게시글 목록)
+ *
+ * Day 1 요구사항: POST-002, POST-006, UX-001
+ *
+ * TanStack Query 적용으로 리팩토링
+ */
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { subscribeToPostsRealtime } from "@/lib/posts";
 import { useAuthStore } from "@/store/authStore";
 import PostList from "@/components/PostList";
-import type { PostSummary } from "@/types";
+
+import type { Category } from "@/types";
+import { CATEGORY_LABELS } from "@/types";
+import { usePosts } from "@/hooks/queries";
 
 function HomePage() {
     const user = useAuthStore((state) => state.user);
-    const [posts, setPosts] = useState<PostSummary[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        const unsubscribe = subscribeToPostsRealtime(
-            // 성공 콜백
-            (data) => {
-                setPosts(data);
-                setIsLoading(false);
-                setError(null);
-            },
-            // 옵션
-            { limitCount: 5 },
-            // 에러 콜백
-            // (err) => {
-            //     console.error("실시간 구독 에러:", err);
-            //     setError("게시글을 불러오는데 실패했습니다.");
-            //     setIsLoading(false);
-            // },
-        );
+    // 카테고리 필터 상태 (Day 1 POST-006)
+    const [selectedCategory, setSelectedCategory] = useState<Category | null>(
+        null,
+    );
 
-        return () => unsubscribe();
-    }, []);
+    // TanStack Query로 게시글 목록 조회
+    const {
+        data: posts = [],
+        isLoading,
+        error,
+    } = usePosts({
+        category: selectedCategory,
+    });
+
+    // 카테고리 목록
+    const categories: Category[] = [
+        "javascript",
+        "typescript",
+        "react",
+        "firebase",
+        "etc",
+    ];
 
     return (
         <div className="space-y-6">
@@ -50,10 +58,39 @@ function HomePage() {
                 )}
             </div>
 
+            {/* 카테고리 필터 (Day 1 POST-006) */}
+            <div className="flex flex-wrap gap-2">
+                <button
+                    onClick={() => setSelectedCategory(null)}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors
+            ${
+                selectedCategory === null
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+                >
+                    전체
+                </button>
+                {categories.map((cat) => (
+                    <button
+                        key={cat}
+                        onClick={() => setSelectedCategory(cat)}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors
+              ${
+                  selectedCategory === cat
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+                    >
+                        {CATEGORY_LABELS[cat]}
+                    </button>
+                ))}
+            </div>
+
             {/* 에러 메시지 */}
             {error && (
                 <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-sm text-red-600">{error}</p>
+                    <p className="text-sm text-red-600">{error.message}</p>
                 </div>
             )}
 
